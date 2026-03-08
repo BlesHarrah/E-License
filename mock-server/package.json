@@ -1,0 +1,14 @@
+{
+  "name": "mock-mosip-server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "DEV_RETURN_OTP=true node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0"
+  }
+}

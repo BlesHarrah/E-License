@@ -7,49 +7,110 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Shield } from 'lucide-react';
 import { toast } from 'sonner';
-
-// Mock users for demonstration
-const mockUsers = [
-  { username: 'admin', password: 'admin123', role: 'admin' },
-  { username: 'licensing', password: 'licensing123', role: 'licensing' },
-  { username: 'traffic', password: 'traffic123', role: 'traffic' },
-];
+import * as auth from '../services/mockAuth';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [mode, setMode] = useState<'password' | 'esignet'>('password');
+
+  // common
   const [role, setRole] = useState<string>('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  // password flow
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginToken, setLoginToken] = useState<string | null>(null);
+  const [otp, setOtp] = useState('');
+
+  // esignet flow
+  const [identifier, setIdentifier] = useState('');
+  const [esignetRequested, setEsignetRequested] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+
+  function handleNavigateByRole(roleStr?: string) {
+    const r = roleStr || role;
+    localStorage.setItem('userRole', r || 'officer');
+    if (r === 'admin') navigate('/admin');
+    else if (r === 'licensing') navigate('/licensing-officer');
+    else if (r === 'traffic') navigate('/traffic-officer');
+    else navigate('/');
+  }
+
+  const submitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!role) {
-      toast.error('Please select a role!');
-      return;
-    }
-
-    const user = mockUsers.find(
-      u => u.username === username && u.password === password && u.role === role
-    );
-
-    if (user) {
-      // Store user session
-      localStorage.setItem('userRole', user.role);
-      localStorage.setItem('username', user.username);
-      
-      toast.success('Login successful!');
-      
-      // Navigate based on role
-      if (user.role === 'admin') {
-        navigate('/admin');
-      } else if (user.role === 'licensing') {
-        navigate('/licensing-officer');
-      } else if (user.role === 'traffic') {
-        navigate('/traffic-officer');
+    if (!role) return toast.error('Please select a role');
+    setLoading(true);
+    try {
+      const resp = await auth.loginWithPassword(username, password);
+      if (resp && resp.login_token) {
+        setLoginToken(resp.login_token);
+        toast.success('OTP sent to your email');
+      } else {
+        toast.error('Unexpected login response');
       }
-    } else {
-      toast.error('Invalid credentials!');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Login failed';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyPasswordOtp = async () => {
+    if (!loginToken) return;
+    setLoading(true);
+    try {
+      const resp = await auth.verifyLoginOtp(loginToken, otp);
+      if (resp && resp.access_token) {
+        localStorage.setItem('access_token', resp.access_token);
+        localStorage.setItem('username', resp.username || username);
+        toast.success('Login successful');
+        handleNavigateByRole(resp.role);
+      } else {
+        toast.error('Invalid response from server');
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Verification failed';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestEsignet = async () => {
+    if (!identifier) return toast.error('Enter username or email');
+    setLoading(true);
+    try {
+      const resp = await auth.requestEsignet(identifier);
+      setEsignetRequested(true);
+      toast.success(resp?.message || 'OTP requested');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Request failed';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyEsignet = async () => {
+    if (!identifier) return toast.error('Missing identifier');
+    setLoading(true);
+    try {
+      const resp = await auth.verifyEsignet(identifier, otp);
+      if (resp && resp.access_token) {
+        localStorage.setItem('access_token', resp.access_token);
+        localStorage.setItem('username', resp.username || identifier);
+        toast.success('Login successful');
+        handleNavigateByRole(resp.role);
+      } else {
+        toast.error('Invalid response from server');
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Verification failed';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -63,54 +124,82 @@ export default function LoginPage() {
             </div>
           </div>
           <CardTitle className="text-2xl">E-License Login</CardTitle>
-          <CardDescription>
-            Enter your credentials to access the system
-          </CardDescription>
+          <CardDescription>Choose a login method</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="role">Select Role</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose your role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                  <SelectItem value="licensing">Licensing Officer</SelectItem>
-                  <SelectItem value="traffic">Traffic Officer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Enter username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            
-            <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700">
-              Login
+          <div className="flex gap-2 mb-4">
+            <Button variant={mode === 'password' ? 'default' : 'secondary'} onClick={() => setMode('password')} className="flex-1">
+              Password
             </Button>
-          </form>
+            <Button variant={mode === 'esignet' ? 'default' : 'secondary'} onClick={() => setMode('esignet')} className="flex-1">
+              Login with eSignet
+            </Button>
+          </div>
+
+          {mode === 'password' && (
+            <form onSubmit={submitPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="role">Select Role</Label>
+                <Select value={role} onValueChange={setRole}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose your role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Administrator</SelectItem>
+                    <SelectItem value="licensing">Licensing Officer</SelectItem>
+                    <SelectItem value="traffic">Traffic Officer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input id="username" type="text" placeholder="Enter username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input id="password" type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              </div>
+
+              <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
+                Continue
+              </Button>
+
+              {loginToken && (
+                <div className="space-y-2">
+                  <Label htmlFor="otp">Enter OTP</Label>
+                  <Input id="otp" type="text" placeholder="6-digit code" value={otp} onChange={(e) => setOtp(e.target.value)} />
+                  <Button onClick={verifyPasswordOtp} className="w-full" disabled={loading}>
+                    Verify OTP
+                  </Button>
+                </div>
+              )}
+            </form>
+          )}
+
+          {mode === 'esignet' && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="identifier">Username or Email</Label>
+                <Input id="identifier" type="text" placeholder="username or email" value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
+              </div>
+
+              {!esignetRequested ? (
+                <Button onClick={requestEsignet} className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
+                Continue
+                </Button>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="otp-esignet">Enter Code</Label>
+                  <Input id="otp-esignet" type="text" placeholder="6-digit code" value={otp} onChange={(e) => setOtp(e.target.value)} />
+                  <Button onClick={verifyEsignet} className="w-full" disabled={loading}>
+                    Verify
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
