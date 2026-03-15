@@ -46,6 +46,24 @@ export default function LoginPage() {
       if (resp && resp.login_token) {
         setLoginToken(resp.login_token);
         toast.success('OTP sent to your email');
+        // If mock server returned the OTP (DEV_RETURN_OTP=true), auto-fill and verify
+        if (resp.code) {
+          setOtp(resp.code);
+          try {
+            const vr = await auth.verifyLoginOtp(resp.login_token, resp.code);
+            if (vr && vr.access_token) {
+              localStorage.setItem('access_token', vr.access_token);
+              localStorage.setItem('username', vr.username || username);
+              toast.success('Login successful');
+              handleNavigateByRole(vr.role);
+            } else {
+              toast.error('Invalid response from server');
+            }
+          } catch (err: any) {
+            const msg = err?.response?.data?.error || err?.message || 'Auto verification failed';
+            toast.error(msg);
+          }
+        }
       } else {
         toast.error('Unexpected login response');
       }
@@ -85,6 +103,24 @@ export default function LoginPage() {
       const resp = await auth.requestEsignet(identifier);
       setEsignetRequested(true);
       toast.success(resp?.message || 'OTP requested');
+      // If mock server returned the OTP (DEV_RETURN_OTP=true), auto-fill and verify
+      if (resp?.code) {
+        setOtp(resp.code);
+        try {
+          const vr = await auth.verifyEsignet(identifier, resp.code);
+          if (vr && vr.access_token) {
+            localStorage.setItem('access_token', vr.access_token);
+            localStorage.setItem('username', vr.username || identifier);
+            toast.success('Login successful');
+            handleNavigateByRole(vr.role);
+          } else {
+            toast.error('Invalid response from server');
+          }
+        } catch (err: any) {
+          const msg = err?.response?.data?.error || err?.message || 'Auto verification failed';
+          toast.error(msg);
+        }
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Request failed';
       toast.error(msg);
@@ -191,10 +227,10 @@ export default function LoginPage() {
                 </Button>
               ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="otp-esignet">Enter Code</Label>
+                  <Label htmlFor="otp-esignet"></Label>
                   <Input id="otp-esignet" type="text" placeholder="6-digit code" value={otp} onChange={(e) => setOtp(e.target.value)} />
                   <Button onClick={verifyEsignet} className="w-full" disabled={loading}>
-                    Verify
+                    Verify eSignet OTP
                   </Button>
                 </div>
               )}

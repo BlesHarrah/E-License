@@ -1,6 +1,8 @@
 import axios from "axios";
 
-const API = import.meta.env.VITE_MOCK_MOSIP_URL || "http://localhost:4000";
+const envApi = import.meta.env.VITE_MOCK_MOSIP_URL;
+const defaultHost = typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:4000` : 'http://localhost:4000';
+const API = envApi || defaultHost;
 
 export async function requestEsignet(identifier: string) {
   return axios.post(`${API}/auth/esignet-request`, { identifier }).then(r => r.data);
